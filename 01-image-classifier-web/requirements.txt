@@ -8,3 +8,6 @@ fastapi>=0.115
 uvicorn>=0.30
 pydantic-settings>=2.5
 python-multipart>=0.0.9
+
+# Fetching datasets (Kaggle CLI)
+kaggle>=1.6

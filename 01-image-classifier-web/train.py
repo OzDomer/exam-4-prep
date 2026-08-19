@@ -93,13 +93,30 @@ def has_image(path: Path) -> bool:
         return False
 
 
+def has_direct_image(path: Path) -> bool:
+    # A real class folder holds image FILES directly. A "wrapper" folder that
+    # only contains other folders (e.g. Kaggle's rps-cv-images/) returns False,
+    # so it is not mistaken for a class.
+    try:
+        return any(
+            p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+            for p in path.iterdir()
+        )
+    except OSError:
+        return False
+
+
 def class_dirs(path: Path) -> list[Path]:
     if not path.is_dir():
         return []
     ignored = {"train", "training", "val", "valid", "validation", "test", "testing"}
     result = []
     for child in path.iterdir():
-        if child.is_dir() and child.name.lower() not in ignored and has_image(child):
+        if (
+            child.is_dir()
+            and child.name.lower() not in ignored
+            and has_direct_image(child)
+        ):
             result.append(child)
     return sorted(result)
 
@@ -150,21 +167,34 @@ def locate_dataset(data_dir: Path) -> tuple[Path, Path | None]:
             val_dir = None
         return train_dir, val_dir
 
-    # Otherwise pick the directory whose children look most like class folders
-    # (most images wins). This also skips any extra wrapper folder a dataset
-    # zip may have unpacked into.
-    scored: list[tuple[int, Path]] = []
+    # Otherwise pick the directory whose children look most like class folders.
+    # Score each candidate by (wrapper_siblings, image_count): a "wrapper
+    # sibling" is a sub-folder that holds images only deeper down (like Kaggle's
+    # duplicate rps-cv-images/ copy) -- ImageFolder would wrongly turn it into an
+    # extra class, so prefer a folder with NONE, then the one with most images.
+    scored: list[tuple[int, int, Path]] = []
     for candidate in candidates:
         classes = class_dirs(candidate)
         if len(classes) < 2:
             continue
+        class_names = {c.name for c in classes}
+        try:
+            wrapper_siblings = sum(
+                1
+                for child in candidate.iterdir()
+                if child.is_dir()
+                and child.name not in class_names
+                and has_image(child)
+            )
+        except OSError:
+            wrapper_siblings = 0
         image_count = sum(
             1
             for c in classes
-            for p in c.rglob("*")
+            for p in c.iterdir()
             if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
         )
-        scored.append((image_count, candidate))
+        scored.append((wrapper_siblings, image_count, candidate))
 
     if not scored:
         raise RuntimeError(
@@ -174,8 +204,9 @@ def locate_dataset(data_dir: Path) -> tuple[Path, Path | None]:
             "  data/train/ClassName/images...\n"
         )
 
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return scored[0][1], None
+    # Fewest wrapper siblings first, then most images.
+    scored.sort(key=lambda item: (item[0], -item[1]))
+    return scored[0][2], None
 
 
 def make_transforms(image_size: int):
