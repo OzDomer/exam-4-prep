@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Trained model + dataset (regenerate with train.py)
+*.pt
+*.pth
+data/

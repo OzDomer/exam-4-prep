@@ -1,0 +1,7 @@
+# Model (training + inference) -- note: NO torchvision needed for a plain MLP
+torch>=2.2
+numpy>=1.24
+Pillow>=10.0
+
+# Fetching datasets (Kaggle CLI)
+kaggle>=1.6
